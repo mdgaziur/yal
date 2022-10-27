@@ -10,6 +10,7 @@ YAL is yet another scripting language(but worse).
 
 - When calling a function, it'll inherit the scope of parent function
 - Sometimes the interpreter will cause deadlock
+- Recursion doesn't always work
 
 # Syntax
 
