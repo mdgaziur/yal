@@ -144,7 +144,7 @@ fun main() {
 | `>>`      | Right shift                |
 | `<<`      | Left shift                 |
 | `&`       | Bitwise and                |
-| `|;`      | Bitwise or                 |
+| `\|`      | Bitwise or                 |
 | `^`       | Bitwise xor                |
 | `~`       | Bitwise not                |
 | `&=`      | Bitwise and by rhs         |
