@@ -1,0 +1,58 @@
+// PARSER GRAMMAR
+program: declaration;
+declaration: varDecl | funDecl | dataDecl | methodsDecl;
+
+varDecl: "const" | "mut" ident "=" expr ";";
+funDecl: "fun" ident "(" (ident ("," ident)*)? ")" "{" blockStmt "}";
+dataDecl: "data" ident "{" (ident ("," ident)*)? "}";
+methodsDecl: "methods" ident "{" funDecl* "}";
+
+stmt: blockStmt | exprStmt | ifStmt | loopStmt | iterStmt | retStmt | breakStmt | continueStmt | declaration;
+loopStmt: "loop" blockStmt;
+iterStmt: "iter" expr ":" ident blockStmt;
+blockStmt: "{" stmt* "}";
+continueStmt: "continue" ";";
+breakStmt: "break" ";";
+retStmt: "ret" expr? ";";
+ifStmt: "if" "(" expr ")" blockStmt ("else" "if" "(" expr ")" blockStmt)* ("else" blockStmt)? ;
+exprStmt: expr ";";
+
+expr: assignExpr;
+assignExpr: "@"? getExpr ("[" expr "]")? (
+									"="   |
+									"+="  |
+									"-="  |
+									"*="  |
+									"/="  |
+									"%="  |
+									"&="  |
+									"|="  |
+									"^="  |
+									"<<=" |
+									">>=" |
+								) assignExpr | dataExpr | logicalOrExpr;
+
+getExpr: callExpr ("." getExpr)*;
+logicalOrExpr: logicalAndExpr ("||" logicalAndExpr)*;
+logicalAndExpr: equalityExpr ("&&" equalityExpr)*;
+equalityExpr: comparisonExpr ("==" | "!=" comparisonExpr)*;
+comparisonExpr: bitwise_or ("<" | "<=" | ">" | ">=" bitwise_or)*;
+bitwise_or: bitwise_xor ("|" bitwise_xor)*;
+bitwise_xor: bitwise_and ("^" bitwise_and)*;
+bitwise_and: bitwise_shift ("&" bitwise_shift)*;
+bitwise_shift: term (("<<" | ">>") term)*;
+term: factor ("+" | "-" factor)*;
+factor: unaryExpr ("*" | "/" | "%" unaryExpr)*;
+unaryExpr: ("!" | "-" | "+") unaryExpr | callExpr;
+callExpr: primaryExpr ("(" (expr ("," expr)*)? ")")*;
+primaryExpr: "true" | "false" | "none" | ident | string | number | "(" expr ")" | arrayExpr;
+arrayExpr: "[" (expr ("," expr)*)? "]";
+
+// LEXICAL GRAMMAR
+string: '"' (CHAR | ESCAPE)* '"';
+number: ("0b" | "0o" | "0x" )? DIGIT+ ("." DIGIT+)? (("e" | "E") ("+" | "-")? DIGIT+)? ;
+ident: ALPHA (ALPHA | DIGIT)* ;
+CHAR: [^"\\] ;
+ESCAPE: "\\" [\"bfnrt] ;
+ALPHA: [a-zA-Z_] ;
+DIGIT: [0-9] ;

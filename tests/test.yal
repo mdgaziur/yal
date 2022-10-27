@@ -1,0 +1,62 @@
+fun add(a, b) {
+	ret a + b;
+}
+
+data Square {
+	height,
+	width
+}
+
+// Function to find area of square
+fun area(square) {
+	ret square.height * square.width;
+}
+
+mut state = "1";
+
+fun factorial(n) {
+	if (n <= 1) {
+		ret 1;
+	}
+
+	ret n * factorial(n - 1);
+}
+// main function
+fun main() {
+	println("Noor");
+	println(add(1, 2));
+	mut a = [1,2,3,4, "String", true, false, "Tura", "Turin"];
+	println(a + "N");
+	mut s = Square { height: 4, width: 5 };
+	println(s.height, " ", s.width);
+	s.height += 1;
+	a += 1;
+	a += 2;
+	const pi = 22 / 7;
+	loop {
+		println(pi);
+		break;
+	}
+	print("[");
+	iter a: i {
+		print(i, ", ");
+	}
+	println("]");
+	println("A: ", a);
+	a = 1;
+	println(a);
+	println(s.height);
+	mut i = 5;
+	mut res = 1;
+	loop {
+		if (i == 0) {
+			break;
+		}
+		res *= i;
+		i -= 1;
+	}
+	println(res);
+	println(factorial(5));
+	println(pop([1, 2]));
+	println("Area: ", area(Square { height: 5, width: 4 }));
+}
