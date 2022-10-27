@@ -144,11 +144,11 @@ fun main() {
 | `>>`      | Right shift                |
 | `<<`      | Left shift                 |
 | `&`       | Bitwise and                |
-| `&#124;`  | Bitwise or                 |
+| `|;`      | Bitwise or                 |
 | `^`       | Bitwise xor                |
 | `~`       | Bitwise not                |
 | `&=`      | Bitwise and by rhs         |
-| `&#124;=` | Bitwise or by rhs          |
+| `\|=`     | Bitwise or by rhs          |
 | `^=`      | Bitwise xor by rhs         |
 | `>>=`     | Right shift by rhs         |
 | `<<=`     | Left shift by rhs          |
