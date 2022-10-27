@@ -6,6 +6,11 @@ YAL is yet another scripting language(but worse).
 
 - Implement interpreter code for interpreting `method` statement
 
+# Gotchas
+
+- When calling a function, it'll inherit the scope of parent function
+- Sometimes the interpreter will cause deadlock
+
 # Syntax
 
 ### Basic syntax
@@ -147,7 +152,3 @@ fun main() {
 | `^=`      | Bitwise xor by rhs         |
 | `>>=`     | Right shift by rhs         |
 | `<<=`     | Left shift by rhs          |
-
-# Gotchas
-
-When calling a function, it'll inherit the scope of parent function
