@@ -18,9 +18,6 @@ fun main() {
 ### Comments
 ```go
 // This is a single line comment
-/*
-* This is a multi-line comment
-*/
 ```
 
 ### Variables
