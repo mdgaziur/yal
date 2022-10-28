@@ -537,6 +537,16 @@ impl<'i> Interpreter<'i> {
                             _ => return return_error(),
                         }
                     }
+                    (Value::Float(lhs), Value::Float(rhs)) => {
+                        match op {
+                            BinaryOperation::Plus => Value::Float(*lhs + *rhs),
+                            BinaryOperation::Minus => Value::Float(*lhs - *rhs),
+                            BinaryOperation::Multiply => Value::Float(*lhs * *rhs),
+                            BinaryOperation::Divide => Value::Float(*lhs / *rhs),
+                            BinaryOperation::Modulus => Value::Float(*lhs % *rhs),
+                            _ => return return_error(),
+                        }
+                    }
                     (Value::Int(lhs), Value::Int(rhs)) => match op {
                         BinaryOperation::Plus => Value::Int(*lhs + *rhs),
                         BinaryOperation::Minus => Value::Int(*lhs - *rhs),
