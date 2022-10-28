@@ -41,8 +41,8 @@ fun main() {
 ### Conditions
 ```go
 fun main() {
-    const a = input();
-    const b = input();
+    const a = int(input());
+    const b = int(input());
     
     if (a > b) {
         print("a is greater than b");
@@ -57,14 +57,14 @@ fun main() {
 ### Loops
 ```go
 fun main() {
-    const n = input();
-    mut i = 0;
+    const n = int(input());
+    mut i = 1;
     
     loop {
         if (i > n) {
             break;
         }
-        print(i);
+        println(i);
         i += 1;
     }
 }
