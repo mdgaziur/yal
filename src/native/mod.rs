@@ -3,7 +3,7 @@ use crate::interner::INTERNER;
 use crate::memory::{Allocator, Value};
 use crate::memory::{Callable, ValueAddr};
 use crate::Interpreter;
-use std::borrow::BorrowMut;
+
 use std::io::{Read, Write};
 use std::thread::sleep;
 use std::time::Duration;
@@ -219,7 +219,7 @@ impl Callable for InputFunction {
         interpreter: &mut Interpreter,
         args: Vec<ValueAddr>,
     ) -> Result<Option<ValueAddr>, Diagnostic> {
-        if args.len() >= 1 {
+        if !args.is_empty() {
             PrintFunction {}.call(interpreter, args)?;
         }
 
