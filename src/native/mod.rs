@@ -58,6 +58,7 @@ impl Callable for PrintFunction {
                 "{}",
                 Self::stringify_value(interpreter.get_allocator(), &*value_read)
             );
+            std::io::stdout().flush().unwrap();
         }
 
         Ok(None)
@@ -90,6 +91,7 @@ impl Callable for PrintlnFunction {
     ) -> Result<Option<ValueAddr>, Diagnostic> {
         PrintFunction {}.call(interpreter, args)?;
         println!();
+        std::io::stdout().flush().unwrap();
         Ok(None)
     }
 
