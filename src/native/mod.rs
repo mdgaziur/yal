@@ -3,6 +3,8 @@ use crate::interner::INTERNER;
 use crate::memory::{Allocator, Value};
 use crate::memory::{Callable, ValueAddr};
 use crate::Interpreter;
+use std::borrow::BorrowMut;
+use std::io::{Read, Write};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -194,6 +196,179 @@ impl Callable for ArrayPopFunction {
 
     fn to_string(&self) -> String {
         format!("<native function \"sleep\" at {:p}>", self as *const _)
+    }
+
+    fn clone(&self) -> Self
+    where
+        Self: Sized,
+    {
+        Clone::clone(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InputFunction {}
+
+impl Callable for InputFunction {
+    fn arity(&self) -> usize {
+        usize::MAX
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<ValueAddr>,
+    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        if args.len() >= 1 {
+            PrintFunction {}.call(interpreter, args)?;
+        }
+
+        let mut line = String::new();
+        loop {
+            let size = std::io::stdin().read_line(&mut line).unwrap();
+            if size > 1 {
+                break;
+            }
+        }
+        line.pop();
+
+        Ok(Some(interpreter.get_allocator().allocate(Value::String(
+            INTERNER.write().intern_string(line),
+        ))))
+    }
+
+    fn to_string(&self) -> String {
+        format!("<native function \"input\" at {:p}>", self as *const _)
+    }
+
+    fn clone(&self) -> Self
+    where
+        Self: Sized,
+    {
+        Clone::clone(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IntFunction {}
+
+impl Callable for IntFunction {
+    fn arity(&self) -> usize {
+        1
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<ValueAddr>,
+    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        let n_s = args[0];
+        let n_container = interpreter.get_allocator().get(n_s);
+        let n_read = n_container.read();
+        let res: i64 = match &*n_read {
+            Value::String(s) => match INTERNER.read().get_interned_string(*s).parse() {
+                Ok(res) => res,
+                Err(e) => {
+                    return Err(Diagnostic {
+                        span: Span {
+                            lo: usize::MAX,
+                            hi: usize::MAX,
+                        },
+                        code: ErrorCode::InvalidNumber,
+                        message: format!("Failed to parse number: {e}"),
+                        severity: Severity::Error,
+                    })
+                }
+            },
+            Value::Float(f) => *f as _,
+            Value::Int(i) => *i,
+            _ => {
+                return Err(Diagnostic {
+                    span: Span {
+                        lo: usize::MAX,
+                        hi: usize::MAX,
+                    },
+                    code: ErrorCode::InvalidType,
+                    message: format!(
+                        "Expected type `string`, `float` or `int`, found {}",
+                        n_read.type_()
+                    ),
+                    severity: Severity::Error,
+                })
+            }
+        };
+
+        Ok(Some(interpreter.get_allocator().allocate(Value::Int(res))))
+    }
+
+    fn to_string(&self) -> String {
+        format!("<native function \"input\" at {:p}>", self as *const _)
+    }
+
+    fn clone(&self) -> Self
+    where
+        Self: Sized,
+    {
+        Clone::clone(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FloatFunction {}
+
+impl Callable for FloatFunction {
+    fn arity(&self) -> usize {
+        1
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<ValueAddr>,
+    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        let n_s = args[0];
+        let n_container = interpreter.get_allocator().get(n_s);
+        let n_read = n_container.read();
+        let res: f64 = match &*n_read {
+            Value::String(s) => match INTERNER.read().get_interned_string(*s).parse() {
+                Ok(res) => res,
+                Err(e) => {
+                    return Err(Diagnostic {
+                        span: Span {
+                            lo: usize::MAX,
+                            hi: usize::MAX,
+                        },
+                        code: ErrorCode::InvalidNumber,
+                        message: format!("Failed to parse number: {e}"),
+                        severity: Severity::Error,
+                    })
+                }
+            },
+            Value::Float(f) => *f,
+            Value::Int(i) => *i as _,
+            _ => {
+                return Err(Diagnostic {
+                    span: Span {
+                        lo: usize::MAX,
+                        hi: usize::MAX,
+                    },
+                    code: ErrorCode::InvalidType,
+                    message: format!(
+                        "Expected type `string`, `float` or `int`, found {}",
+                        n_read.type_()
+                    ),
+                    severity: Severity::Error,
+                })
+            }
+        };
+
+        Ok(Some(
+            interpreter.get_allocator().allocate(Value::Float(res)),
+        ))
+    }
+
+    fn to_string(&self) -> String {
+        format!("<native function \"input\" at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self

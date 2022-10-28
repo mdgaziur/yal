@@ -59,4 +59,24 @@ fun main() {
 	println(factorial(5));
 	println(pop([1, 2]));
 	println("Area: ", area(Square { height: 5, width: 4 }));
+
+	const height = float(input("Enter height: "));
+	const width = float(input("Enter width: "));
+	const sq = Square { height: height, width: width };
+	println("Area: ", area(sq));
+
+	const name = input("Enter your name: ");
+	println("Hi ", name, "!");
+
+	const T = int(input("Enter T: "));
+	mut i = 1;
+	loop {
+		if (i > T) {
+			break;
+		}
+
+		println(i);
+
+		i += 1;
+	}
 }

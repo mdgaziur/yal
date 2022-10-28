@@ -6,7 +6,10 @@ use crate::diagnostics::{Diagnostic, ErrorCode, Severity, Span};
 use crate::interner::{InternedString, INTERNER};
 use crate::lexer::NumberKind;
 use crate::memory::{Allocator, Callable, DataObject, Value, ValueAddr};
-use crate::native::{ArrayPopFunction, PrintFunction, PrintlnFunction, SleepFunction};
+use crate::native::{
+    ArrayPopFunction, FloatFunction, InputFunction, IntFunction, PrintFunction, PrintlnFunction,
+    SleepFunction,
+};
 use crate::Session;
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
@@ -918,6 +921,9 @@ impl<'i> Interpreter<'i> {
         create_native_fn(allocator, "println", Box::new(PrintlnFunction {}));
         create_native_fn(allocator, "sleep", Box::new(SleepFunction {}));
         create_native_fn(allocator, "pop", Box::new(ArrayPopFunction {}));
+        create_native_fn(allocator, "input", Box::new(InputFunction {}));
+        create_native_fn(allocator, "int", Box::new(IntFunction {}));
+        create_native_fn(allocator, "float", Box::new(FloatFunction {}));
 
         for stmt in ast {
             match &stmt.stmt {
