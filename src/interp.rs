@@ -11,7 +11,6 @@ use crate::native::{
     SleepFunction,
 };
 use crate::Session;
-use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::str::FromStr;

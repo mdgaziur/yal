@@ -4,7 +4,7 @@ use crate::memory::{Allocator, Value};
 use crate::memory::{Callable, ValueAddr};
 use crate::Interpreter;
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::thread::sleep;
 use std::time::Duration;
 
