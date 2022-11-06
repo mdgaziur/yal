@@ -6,18 +6,35 @@ YAL is yet another scripting language(but worse).
 
 - Implement interpreter code for interpreting `method` statement
 
-# Gotchas
-
-- When calling a function, it'll inherit the scope of parent function
-- Sometimes the interpreter will cause deadlock
-- Recursion doesn't always work
-
 # Syntax
 
 ### Basic syntax
 ```go
 fun main() {
     print("Hello, World!");
+}
+```
+
+### Fibonacci
+```go
+fun fib(n) {
+	if (n <= 1) {
+		ret n;
+	}
+
+	ret fib(n - 1) + fib(n - 2);
+}
+
+fun main() {
+	mut n = 10;
+	loop {
+		if (n < 0) {
+			break;
+		}
+
+		println(fib(n));
+		n -= 1;
+	}
 }
 ```
 
