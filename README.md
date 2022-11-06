@@ -9,14 +9,14 @@ YAL is yet another scripting language(but worse).
 # Syntax
 
 ### Basic syntax
-```go
+```rust
 fun main() {
     print("Hello, World!");
 }
 ```
 
 ### Fibonacci
-```go
+```rust
 fun fib(n) {
 	if (n <= 1) {
 		ret n;
@@ -39,12 +39,12 @@ fun main() {
 ```
 
 ### Comments
-```go
+```rust
 // This is a single line comment
 ```
 
 ### Variables
-```go
+```rust
 fun main() {
     // A variable is either const,
     const a = 1;
@@ -56,7 +56,7 @@ fun main() {
 ```
 
 ### Conditions
-```go
+```rust
 fun main() {
     const a = int(input());
     const b = int(input());
@@ -72,7 +72,7 @@ fun main() {
 ```
 
 ### Loops
-```go
+```rust
 fun main() {
     const n = int(input());
     mut i = 1;
@@ -88,7 +88,7 @@ fun main() {
 ```
 
 ### Arrays
-```go
+```rust
 fun main() {
     const arr = [1, 2, 3, 4, 5];
     print(arr[0]); // 1
@@ -105,14 +105,14 @@ fun main() {
 ```
 
 ### Functions
-```go
+```rust
 fun add(a, b) {
     ret a + b;
 }
 ```
 
 ### Data
-```go
+```rust
 data Triangle {
     AB,
     AC,
