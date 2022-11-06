@@ -306,6 +306,7 @@ impl<'i> Interpreter<'i> {
                                 addr: rvalue,
                             },
                         );
+                        break;
                     }
                 }
 
@@ -984,8 +985,12 @@ impl<'i> Interpreter<'i> {
         Ok(())
     }
 
-    pub fn get_allocator(&mut self) -> &mut Allocator {
+    pub fn get_allocator_mut(&mut self) -> &mut Allocator {
         &mut self.allocator
+    }
+
+    pub fn get_allocator(&self) -> &Allocator {
+        &self.allocator
     }
 }
 
@@ -1015,6 +1020,12 @@ impl Callable for YalFunction {
                 },
             );
         }
+        let parent_scope;
+        if env.get_mut(&interpreter.current).unwrap().len() > 1 {
+            parent_scope = env.get_mut(&interpreter.current).unwrap().pop();
+        } else {
+            parent_scope = None;
+        }
         env.get_mut(&interpreter.current).unwrap().push(scope);
         drop(env);
 
@@ -1023,6 +1034,18 @@ impl Callable for YalFunction {
                 for stmt in stmts {
                     if let Err(err) = interpreter.interpret_stmt(stmt) {
                         return if let ErrorCode::Return(rv) = err.code {
+                            let mut env = interpreter.envs.borrow_mut();
+                            for _val in env.get_mut(&interpreter.current).unwrap().last().unwrap() {
+                                // FIXME: make sure deallocation actually works. At this moment, this will deallocate even if there
+                                //        are "ValueAddr"s pointing to it
+                                // self.allocator.deallocate(val.1.addr);
+                            }
+                            env.get_mut(&interpreter.current).unwrap().pop();
+                            if let Some(parent_scope) = parent_scope {
+                                env.get_mut(&interpreter.current)
+                                    .unwrap()
+                                    .push(parent_scope);
+                            }
                             Ok(Some(rv))
                         } else {
                             Err(err)
@@ -1038,6 +1061,12 @@ impl Callable for YalFunction {
             // FIXME: make sure deallocation actually works. At this moment, this will deallocate even if there
             //        are "ValueAddr"s pointing to it
             // self.allocator.deallocate(val.1.addr);
+        }
+        env.get_mut(&interpreter.current).unwrap().pop();
+        if let Some(parent_scope) = parent_scope {
+            env.get_mut(&interpreter.current)
+                .unwrap()
+                .push(parent_scope);
         }
         Ok(None)
     }
