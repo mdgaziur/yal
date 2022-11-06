@@ -54,7 +54,7 @@ impl Callable for PrintFunction {
         args: Vec<ValueAddr>,
     ) -> Result<Option<ValueAddr>, Diagnostic> {
         for arg in args {
-            let value = interpreter.get_allocator_mut().get(arg);
+            let value = interpreter.get_allocator().get(arg);
             let value_read = value.read();
             print!(
                 "{}",
@@ -123,7 +123,7 @@ impl Callable for SleepFunction {
         args: Vec<ValueAddr>,
     ) -> Result<Option<ValueAddr>, Diagnostic> {
         let time_addr = args[0];
-        let time_container = interpreter.get_allocator_mut().get(time_addr);
+        let time_container = interpreter.get_allocator().get(time_addr);
         let time_read = time_container.read();
         let time = match &*time_read {
             Value::Int(i) => *i as f64,
@@ -175,7 +175,7 @@ impl Callable for ArrayPopFunction {
         args: Vec<ValueAddr>,
     ) -> Result<Option<ValueAddr>, Diagnostic> {
         let array_addr = args[0];
-        let array_container = interpreter.get_allocator_mut().get(array_addr);
+        let array_container = interpreter.get_allocator().get(array_addr);
         let mut array_read = array_container.write();
         let array = match &mut *array_read {
             Value::Array(arr) => arr,
@@ -263,7 +263,7 @@ impl Callable for IntFunction {
         args: Vec<ValueAddr>,
     ) -> Result<Option<ValueAddr>, Diagnostic> {
         let n_s = args[0];
-        let n_container = interpreter.get_allocator_mut().get(n_s);
+        let n_container = interpreter.get_allocator().get(n_s);
         let n_read = n_container.read();
         let res: i64 = match &*n_read {
             Value::String(s) => match INTERNER.read().get_interned_string(*s).parse() {
@@ -329,7 +329,7 @@ impl Callable for FloatFunction {
         args: Vec<ValueAddr>,
     ) -> Result<Option<ValueAddr>, Diagnostic> {
         let n_s = args[0];
-        let n_container = interpreter.get_allocator_mut().get(n_s);
+        let n_container = interpreter.get_allocator().get(n_s);
         let n_read = n_container.read();
         let res: f64 = match &*n_read {
             Value::String(s) => match INTERNER.read().get_interned_string(*s).parse() {
