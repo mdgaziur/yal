@@ -637,7 +637,7 @@ impl<'i> Interpreter<'i> {
                         })
                     }
                 };
-                if function.arity() != usize::MAX && call_expr.args.len() > function.arity() {
+                if function.arity() != usize::MAX && call_expr.args.len() != function.arity() {
                     return Err(Diagnostic {
                         span: expr.span,
                         message: format!(
