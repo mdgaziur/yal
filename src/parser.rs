@@ -730,7 +730,10 @@ impl Parser {
         loop {
             op = BinaryOperation::try_from(self.peek().kind);
             if let Ok(op) = op {
-                if op == BinaryOperation::Multiply || op == BinaryOperation::Divide {
+                if op == BinaryOperation::Multiply
+                    || op == BinaryOperation::Divide
+                    || op == BinaryOperation::Modulus
+                {
                     self.advance();
                     let rhs = self.unary()?;
 
