@@ -1,19 +1,21 @@
 use crate::diagnostics::{Diagnostic, ErrorCode, Severity, Span};
 use crate::interner::INTERNER;
-use crate::memory::{Allocator, Value};
-use crate::memory::{Callable, ValueAddr};
+use crate::memory::{Callable, Value};
 use crate::Interpreter;
 
 use std::io::Write;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
+
+use parking_lot::RwLock;
 
 #[derive(Debug, Clone)]
 pub struct PrintFunction {}
 
 impl PrintFunction {
-    pub fn stringify_value(allocator: &Allocator, value: &Value) -> String {
-        match &*value {
+    pub fn stringify_value(value: &Value) -> String {
+        match value {
             Value::Int(i) => i.to_string(),
             Value::Float(f) => f.to_string(),
             Value::Boolean(b) => b.to_string(),
@@ -26,12 +28,12 @@ impl PrintFunction {
                 let mut res = String::from("[");
                 let mut str_vals = vec![];
                 for v in a {
-                    let val = allocator.get(*v);
+                    let val = v.clone();
                     let val_reader = val.read();
                     if let Value::String(s) = &*val_reader {
                         str_vals.push(format!("{:?}", INTERNER.read().get_interned_string(*s)));
                     } else {
-                        str_vals.push(Self::stringify_value(allocator, &*val_reader));
+                        str_vals.push(Self::stringify_value(&val_reader));
                     }
                 }
 
@@ -50,16 +52,12 @@ impl Callable for PrintFunction {
 
     fn call(
         &self,
-        interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        _interpreter: &mut Interpreter,
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
         for arg in args {
-            let value = interpreter.get_allocator().get(arg);
-            let value_read = value.read();
-            print!(
-                "{}",
-                Self::stringify_value(interpreter.get_allocator_mut(), &*value_read)
-            );
+            let value_read = arg.read();
+            print!("{}", Self::stringify_value(&value_read));
             std::io::stdout().flush().unwrap();
         }
 
@@ -89,8 +87,8 @@ impl Callable for PrintlnFunction {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
         PrintFunction {}.call(interpreter, args)?;
         println!();
         std::io::stdout().flush().unwrap();
@@ -119,11 +117,10 @@ impl Callable for SleepFunction {
 
     fn call(
         &self,
-        interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
-        let time_addr = args[0];
-        let time_container = interpreter.get_allocator().get(time_addr);
+        _interpreter: &mut Interpreter,
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
+        let time_container = args[0].clone();
         let time_read = time_container.read();
         let time = match &*time_read {
             Value::Int(i) => *i as f64,
@@ -171,11 +168,10 @@ impl Callable for ArrayPopFunction {
 
     fn call(
         &self,
-        interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
-        let array_addr = args[0];
-        let array_container = interpreter.get_allocator().get(array_addr);
+        _interpreter: &mut Interpreter,
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
+        let array_container = args[0].clone();
         let mut array_read = array_container.write();
         let array = match &mut *array_read {
             Value::Array(arr) => arr,
@@ -217,8 +213,8 @@ impl Callable for InputFunction {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
         if !args.is_empty() {
             PrintFunction {}.call(interpreter, args)?;
         }
@@ -260,10 +256,9 @@ impl Callable for IntFunction {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
-        let n_s = args[0];
-        let n_container = interpreter.get_allocator().get(n_s);
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
+        let n_container = args[0].clone();
         let n_read = n_container.read();
         let res: i64 = match &*n_read {
             Value::String(s) => match INTERNER.read().get_interned_string(*s).parse() {
@@ -326,10 +321,9 @@ impl Callable for FloatFunction {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
-        let n_s = args[0];
-        let n_container = interpreter.get_allocator().get(n_s);
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
+        let n_container = args[0].clone();
         let n_read = n_container.read();
         let res: f64 = match &*n_read {
             Value::String(s) => match INTERNER.read().get_interned_string(*s).parse() {
@@ -392,14 +386,13 @@ impl Callable for PowFunction {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
-        let v_1_addr = args[0];
-        let v_1_container = interpreter.get_allocator().get(v_1_addr);
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
+        let v_1_container = args[0].clone();
         let v_1_read = v_1_container.read();
         let v_1 = match &*v_1_read {
             Value::Int(i) => *i as f64,
-            Value::Float(f) => *f as f64,
+            Value::Float(f) => *f,
             _ => {
                 return Err(Diagnostic {
                     span: Span {
@@ -416,12 +409,11 @@ impl Callable for PowFunction {
             }
         };
 
-        let v_2_addr = args[1];
-        let v_2_container = interpreter.get_allocator().get(v_2_addr);
+        let v_2_container = args[1].clone();
         let v_2_read = v_2_container.read();
         let v_2 = match &*v_2_read {
             Value::Int(i) => *i as f64,
-            Value::Float(f) => *f as f64,
+            Value::Float(f) => *f,
             _ => {
                 return Err(Diagnostic {
                     span: Span {

@@ -20,56 +20,42 @@ impl Allocator {
         }
     }
 
-    pub fn get_none(&self) -> ValueAddr {
-        ValueAddr(0)
+    pub fn get_none(&self) -> Arc<RwLock<Value>> {
+        self.allocations[0].clone()
     }
 
-    pub fn allocate(&mut self, value: Value) -> ValueAddr {
+    pub fn allocate(&mut self, value: Value) -> Arc<RwLock<Value>> {
         if self.allocations.is_empty() {
             self.allocations.push(Arc::new(RwLock::new(Value::None)));
         }
         if matches!(value, Value::None) {
-            return ValueAddr(0);
+            return self.allocations[0].clone();
         }
         self.allocations.push(Arc::new(RwLock::new(value)));
-        ValueAddr(self.allocations.len() - 1)
+        self.allocations.last().unwrap().clone()
     }
 
-    pub fn clone(&mut self, addr: ValueAddr) -> ValueAddr {
-        let value_arc = self.allocations[addr.0].clone();
-        let value_read = value_arc.read();
+    pub fn clone(&mut self, value: &Arc<RwLock<Value>>) -> Arc<RwLock<Value>> {
+        let value_read = value.read();
         let cloned_value = match &*value_read {
             Value::Int(i) => Value::Int(*i),
             Value::Float(f) => Value::Float(*f),
             Value::Boolean(b) => Value::Boolean(*b),
             Value::String(s) => Value::String(*s),
             Value::None => Value::None,
-            Value::Function(_f) => return addr,
+            Value::Function(_f) => return value.clone(),
             Value::Data(d, m) => Value::Data(d.clone(), m.clone()),
             Value::DataObject(d_object) => Value::DataObject(d_object.clone()),
             Value::Array(a) => Value::Array(a.clone()),
         };
         self.allocations.push(Arc::new(RwLock::new(cloned_value)));
-        ValueAddr(self.allocations.len() - 1)
+        self.allocations.last().unwrap().clone()
     }
 
-    pub fn deallocate(&mut self, addr: ValueAddr) {
-        // FIXME: this is probably not the proper way to deallocate as currently references
-        //        are stored as Valuaddr that doesn't hold any strong or weak pointer to value
-        if let Some(obj) = self.allocations.get(addr.0) {
-            if Arc::strong_count(obj) == 0 {
-                self.allocations.remove(addr.0);
-            }
-        }
-    }
-
-    pub fn get(&self, addr: ValueAddr) -> Arc<RwLock<Value>> {
-        self.allocations[addr.0].clone()
+    pub fn dealloc_unused_objects(&mut self) {
+        self.allocations.retain(|e| Arc::strong_count(e) > 1)
     }
 }
-
-#[derive(Debug, Clone, Copy)]
-pub struct ValueAddr(usize);
 
 #[derive(Debug)]
 pub enum Value {
@@ -81,7 +67,7 @@ pub enum Value {
     Function(Box<dyn Callable>),
     Data(Box<DataStmt>, HashMap<InternedString, Box<FunStmt>>),
     DataObject(DataObject),
-    Array(Vec<ValueAddr>),
+    Array(Vec<Arc<RwLock<Value>>>),
 }
 
 impl Value {
@@ -105,8 +91,8 @@ pub trait Callable: Debug + Send + Sync {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic>;
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic>;
     fn to_string(&self) -> String;
     fn clone(&self) -> Self
     where
@@ -116,6 +102,6 @@ pub trait Callable: Debug + Send + Sync {
 #[derive(Debug, Clone)]
 pub struct DataObject {
     pub name: InternedString,
-    pub values: HashMap<InternedString, ValueAddr>,
+    pub values: HashMap<InternedString, Arc<RwLock<Value>>>,
     pub methods: HashMap<InternedString, Box<FunStmt>>,
 }

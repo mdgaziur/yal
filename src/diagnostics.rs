@@ -1,7 +1,11 @@
-use crate::memory::ValueAddr;
+use crate::memory::Value;
+
 use owo_colors::OwoColorize;
 use std::cmp::max;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
@@ -71,11 +75,12 @@ impl Diagnostic {
         buf.push_str(&format!(
             "{}{}{}\n",
             blank_line,
-            " ".repeat(padding - 1),
+            " ".repeat(padding),
             "^".repeat(count).bright_yellow().bold()
         ));
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn write_pos(
         &self,
         buf: &mut String,
@@ -99,7 +104,7 @@ impl Diagnostic {
                     .checked_sub(tab_count)
                     .unwrap_or_default()
             } else {
-                0
+                1
             };
             let count;
 
@@ -114,17 +119,19 @@ impl Diagnostic {
                         - tab_count_until_end;
                 }
             } else if line_num == starting_pos.line {
-                count = line.len() - padding;
+                count = line.len().checked_sub(padding).unwrap_or(1) + 1;
             } else if line_num == ending_pos.line {
                 let tab_count_until_end = count_tab_until(lines[line_num - 1], ending_pos.column);
 
-                count = ending_pos.column + 1 + tab_count_until_end * 4 - tab_count_until_end;
+                count = ending_pos.column + tab_count_until_end * 4 - tab_count_until_end;
             } else {
-                count = line.len() - padding;
+                count = line.len().checked_sub(padding).unwrap_or(1) + 1;
             }
 
             Self::generate_line(buf, &line, line_num, max_line_num_size);
-            Self::write_marker(buf, blank_line, padding + 1, count);
+            if !line.is_empty() {
+                Self::write_marker(buf, blank_line, padding, count);
+            }
         }
     }
 
@@ -143,7 +150,13 @@ impl Diagnostic {
         let mut buf = String::new();
         let lines = file_content.split('\n').collect::<Vec<&str>>();
         let starting_pos = self.calculate_pos_for_n(file_content, self.span.lo);
-        let ending_pos = self.calculate_pos_for_n(file_content, self.span.hi);
+        let ending_pos = self.calculate_pos_for_n(file_content, {
+            if self.span.hi == usize::MAX {
+                file_content.len() - 1
+            } else {
+                self.span.hi
+            }
+        });
         let max_line_num_size = Self::max_line_number_size(starting_pos, ending_pos);
         let blank_line = format!("{} |", " ".repeat(max_line_num_size))
             .bright_blue()
@@ -216,7 +229,7 @@ fn count_tab_until(line: &str, offset: usize) -> usize {
     count
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum ErrorCode {
     UnknownToken,
     InvalidNumber,
@@ -225,19 +238,22 @@ pub enum ErrorCode {
     InvalidAssignment,
     InvalidLoopControl,
     UndefinedVariable,
+    #[allow(unused)]
     UndefinedFunction,
+    #[allow(unused)]
     InvalidBinaryOperation,
     InvalidUnaryOperation,
     InvalidEscapeCharacter,
     InvalidType,
     ArityError,
-    Return(ValueAddr), // Hack to return from functions
+    Return(Arc<RwLock<Value>>), // Hack to return from functions
     InvalidDataPropertySet,
     MissingProp,
     UnknownProp,
     MutabilityError,
     Break,    // Hack for breaking loops
     Continue, // Hack for `continue`
+    NoMain,
 }
 
 impl Display for ErrorCode {
@@ -263,6 +279,7 @@ impl Display for ErrorCode {
             ErrorCode::MutabilityError => write!(f, "E0018"),
             ErrorCode::Break => write!(f, "E0000"),
             ErrorCode::Continue => write!(f, "E0000"),
+            ErrorCode::NoMain => write!(f, "E0019"),
         }
     }
 }
@@ -271,6 +288,7 @@ impl Display for ErrorCode {
 pub enum Severity {
     Error,
     Warning,
+    #[allow(unused)]
     Info,
 }
 

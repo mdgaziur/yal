@@ -56,7 +56,7 @@ impl Session {
     }
 
     pub fn has_diagnostics(&self) -> bool {
-        for (_, diags) in &self.diagnostics {
+        for diags in self.diagnostics.values() {
             for diag in diags {
                 if diag.severity == Severity::Error {
                     return true;

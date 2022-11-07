@@ -4,7 +4,7 @@ use crate::ast::{
     MethodsStmt, Mutable, NumberExpr, SetExpr, Stmt, StmtContainer, UnaryExpr, UnaryOperation,
     VarStmt, VariableExpr,
 };
-use crate::diagnostics::{Diagnostic, ErrorCode, Severity, Span};
+use crate::diagnostics::{Diagnostic, ErrorCode, Severity};
 
 use crate::lexer::{Lexer, Token, TokenKind};
 use std::collections::HashMap;
@@ -878,7 +878,7 @@ impl Parser {
                         let value = self.expr()?;
                         let sp = prop_span.merge(value.span);
 
-                        if let Some(_) = props.insert(prop, value) {
+                        if props.insert(prop, value).is_some() {
                             err = Some(Diagnostic {
                                 code: ErrorCode::InvalidDataPropertySet,
                                 severity: Severity::Error,

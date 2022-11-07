@@ -5,7 +5,7 @@ use crate::ast::{
 use crate::diagnostics::{Diagnostic, ErrorCode, Severity, Span};
 use crate::interner::{InternedString, INTERNER};
 use crate::lexer::NumberKind;
-use crate::memory::{Allocator, Callable, DataObject, Value, ValueAddr};
+use crate::memory::{Allocator, Callable, DataObject, Value};
 use crate::native::{
     ArrayPopFunction, FloatFunction, InputFunction, IntFunction, PowFunction, PrintFunction,
     PrintlnFunction, SleepFunction,
@@ -14,6 +14,9 @@ use crate::Session;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 pub struct Interpreter<'i> {
     allocator: Allocator,
@@ -25,6 +28,7 @@ pub struct Interpreter<'i> {
 
 impl<'i> Interpreter<'i> {
     pub fn new(session: &'i mut Session) -> Self {
+        INTERNER.write().intern_string("main".to_string());
         Self {
             allocator: Allocator::new(),
             session: RefCell::new(session),
@@ -65,9 +69,8 @@ impl<'i> Interpreter<'i> {
 
     pub fn interpret(&mut self) {
         let session = self.session.borrow();
-        let ast = session.get_ast(self.current).to_vec(); // TODO: don't use a lot of memory :|
         drop(session);
-        if let Err(e) = self.interpret_ast(&ast) {
+        if let Err(e) = self.interpret_main() {
             eprintln!(
                 "{}",
                 e.display(
@@ -78,18 +81,39 @@ impl<'i> Interpreter<'i> {
         }
     }
 
-    pub fn interpret_ast(&mut self, ast: &[StmtContainer]) -> Result<(), Diagnostic> {
-        for stmt in ast {
-            if let Stmt::Fun(fs) = &stmt.stmt {
-                if INTERNER.read().get_interned_string(fs.name) != "main" {
-                    continue;
-                }
+    pub fn interpret_main(&mut self) -> Result<(), Diagnostic> {
+        let envs = self.envs.borrow();
+        let Some(main_function_env_item) = envs
+            .get(&self.current)
+            .unwrap()
+            .last()
+            .unwrap()
+            .get(&INTERNER.read().get_intern_addr_for_string("main").unwrap()) else {
+            return Err(Diagnostic {
+                severity: Severity::Error,
+                code: ErrorCode::NoMain,
+                message: "No `main` function in module".to_string(),
+                span: Span { lo: 0, hi: usize::MAX }
+            })
+        };
+        let main_function_container = main_function_env_item.clone().value;
+        let main_function_read = main_function_container.read();
+        drop(envs);
+        match &*main_function_read {
+            Value::Function(fun) => {
+                fun.call(self, vec![])?;
+                Ok(())
             }
-
-            self.interpret_stmt(stmt)?;
+            _ => Err(Diagnostic {
+                severity: Severity::Error,
+                code: ErrorCode::NoMain,
+                message: "`main` must be a function".to_string(),
+                span: Span {
+                    lo: 0,
+                    hi: usize::MAX,
+                },
+            }),
         }
-
-        Ok(())
     }
 
     fn interpret_stmt(&mut self, stmt: &StmtContainer) -> Result<(), Diagnostic> {
@@ -107,12 +131,9 @@ impl<'i> Interpreter<'i> {
                         var_stmt.name,
                         EnvItem {
                             mutable: var_stmt.mutable,
-                            addr: interpreted_value,
+                            value: interpreted_value,
                         },
                     );
-            }
-            Stmt::Fun(fun_stmt) => {
-                self.interpret_function(fun_stmt)?;
             }
             Stmt::Loop(block) => loop {
                 if let Err(e) = self.interpret_stmt(block) {
@@ -124,18 +145,27 @@ impl<'i> Interpreter<'i> {
                 }
             },
             Stmt::Block(stmts) => {
+                let scope = Scope::new();
+                self.envs
+                    .borrow_mut()
+                    .get_mut(&self.current)
+                    .unwrap()
+                    .push(scope);
                 for stmt in stmts {
-                    self.interpret_stmt(stmt)?;
+                    if let Err(e) = self.interpret_stmt(stmt) {
+                        self.envs.borrow_mut().get_mut(&self.current).unwrap().pop();
+                        self.allocator.dealloc_unused_objects();
+                        return Err(e);
+                    }
                 }
+
+                self.envs.borrow_mut().get_mut(&self.current).unwrap().pop();
+                self.allocator.dealloc_unused_objects();
             }
             Stmt::If(if_stmt) => {
-                let condition_addr = self.interpret_expr(&if_stmt.condition)?;
-                let condition_container = self.allocator.get(condition_addr);
+                let condition_container = self.interpret_expr(&if_stmt.condition)?;
                 let condition_read = condition_container.read();
-                let is_condition_met = match &*condition_read {
-                    Value::None | Value::Boolean(false) => false,
-                    _ => true,
-                };
+                let is_condition_met = !matches!(&*condition_read, Value::None | Value::Boolean(false));
 
                 if is_condition_met {
                     self.interpret_stmt(&if_stmt.block)?;
@@ -148,8 +178,7 @@ impl<'i> Interpreter<'i> {
                 return Ok(());
             }
             Stmt::Iter(iter_stmt) => {
-                let iterable_addr = self.interpret_expr(&iter_stmt.iterable)?;
-                let iterable_container = self.allocator.get(iterable_addr);
+                let iterable_container = self.interpret_expr(&iter_stmt.iterable)?;
                 let iterable_read = iterable_container.read();
                 let array = match &*iterable_read {
                     Value::Array(arr) => arr,
@@ -169,7 +198,7 @@ impl<'i> Interpreter<'i> {
                         iter_stmt.binding,
                         EnvItem {
                             mutable: Mutable::No,
-                            addr: *item,
+                            value: item.clone(),
                         },
                     );
                     self.envs
@@ -190,11 +219,11 @@ impl<'i> Interpreter<'i> {
                 }
             }
             Stmt::Ret(v) => {
-                let val_addr = self.interpret_expr(v)?;
+                let val = self.interpret_expr(v)?;
 
                 return Err(Diagnostic {
                     severity: Severity::Error,
-                    code: ErrorCode::Return(val_addr),
+                    code: ErrorCode::Return(val),
                     message: String::from("This error should never be displayed"),
                     span: stmt.span,
                 });
@@ -220,38 +249,10 @@ impl<'i> Interpreter<'i> {
             }
             Stmt::Data(_) => (),
             Stmt::Methods(_) => (),
+            Stmt::Fun(_) => (),
         }
 
         Ok(())
-    }
-
-    fn interpret_function(&mut self, fun_stmt: &FunStmt) -> Result<Option<ValueAddr>, Diagnostic> {
-        let mut env = self.envs.borrow_mut();
-        env.get_mut(&self.current).unwrap().push(HashMap::new());
-        drop(env);
-
-        match &fun_stmt.body.stmt {
-            Stmt::Block(stmts) => {
-                for stmt in stmts {
-                    if let Err(err) = self.interpret_stmt(stmt) {
-                        return if let ErrorCode::Return(rv) = err.code {
-                            Ok(Some(rv))
-                        } else {
-                            Err(err)
-                        };
-                    }
-                }
-            }
-            _ => unreachable!(),
-        }
-
-        let mut env = self.envs.borrow_mut();
-        for _val in env.get_mut(&self.current).unwrap().last().unwrap() {
-            // FIXME: make sure deallocation actually works. At this moment, this will deallocate even if there
-            //        are "ValueAddr"s pointing to it
-            // self.allocator.deallocate(val.1.addr);
-        }
-        Ok(None)
     }
 
     fn get_mutability(&self, name: InternedString) -> Option<Mutable> {
@@ -267,7 +268,7 @@ impl<'i> Interpreter<'i> {
         None
     }
 
-    fn interpret_expr(&mut self, expr: &ExprContainer) -> Result<ValueAddr, Diagnostic> {
+    fn interpret_expr(&mut self, expr: &ExprContainer) -> Result<Arc<RwLock<Value>>, Diagnostic> {
         let val = match &expr.expr {
             Expr::Assignment(assignment_expr) => {
                 let v_expr = match &assignment_expr.lvalue.expr {
@@ -318,7 +319,7 @@ impl<'i> Interpreter<'i> {
                             name,
                             EnvItem {
                                 mutable: Mutable::Yes,
-                                addr: rvalue,
+                                value: rvalue.clone(),
                             },
                         );
                         break;
@@ -328,14 +329,13 @@ impl<'i> Interpreter<'i> {
                 return Ok(rvalue);
             }
             Expr::Data(data_expr) => {
-                let data_addr = self.interpret_expr(&ExprContainer {
+                let data_container = self.interpret_expr(&ExprContainer {
                     span: expr.span,
                     expr: Expr::Variable(VariableExpr {
                         name: data_expr.name,
                         data_member: false,
                     }),
                 })?;
-                let data_container = self.allocator.get(data_addr);
                 let data_read = data_container.read();
                 let (data_stmt, data_methods) = match &*data_read {
                     Value::Data(ds, dm) => (ds, dm.clone()),
@@ -416,11 +416,9 @@ impl<'i> Interpreter<'i> {
                 }
             }
             Expr::Logical(logical_expr) => {
-                let lhs_addr = self.interpret_expr(&logical_expr.lhs)?;
-                let lhs_container = self.allocator.get(lhs_addr);
+                let lhs_container = self.interpret_expr(&logical_expr.lhs)?;
                 let lhs_inner = lhs_container.read();
-                let rhs_addr = self.interpret_expr(&logical_expr.rhs)?;
-                let rhs_container = self.allocator.get(rhs_addr);
+                let rhs_container = self.interpret_expr(&logical_expr.rhs)?;
                 let rhs_inner = rhs_container.read();
                 let lhs_type = lhs_inner.type_();
                 let rhs_type = rhs_inner.type_();
@@ -542,11 +540,9 @@ impl<'i> Interpreter<'i> {
                 Ok(res)
             }
             Expr::Binary(binary_expr) => {
-                let lhs_addr = self.interpret_expr(&binary_expr.lhs)?;
-                let lhs_container = self.allocator.get(lhs_addr);
+                let lhs_container = self.interpret_expr(&binary_expr.lhs)?;
                 let lhs_inner = lhs_container.read();
-                let rhs_addr = self.interpret_expr(&binary_expr.rhs)?;
-                let rhs_container = self.allocator.get(rhs_addr);
+                let rhs_container = self.interpret_expr(&binary_expr.rhs)?;
                 let rhs_inner = rhs_container.read();
                 let lhs_type = lhs_inner.type_();
                 let rhs_type = rhs_inner.type_();
@@ -610,10 +606,10 @@ impl<'i> Interpreter<'i> {
                     },
                     (Value::Array(arr), _) => {
                         let mut new_arr = arr.clone();
-                        new_arr.push(rhs_addr);
-                        let arr_addr = self.allocator.allocate(Value::Array(new_arr));
+                        new_arr.push(rhs_container.clone());
+                        let arr = self.allocator.allocate(Value::Array(new_arr));
 
-                        return Ok(arr_addr);
+                        return Ok(arr);
                     }
                     _ => return return_error(),
                 };
@@ -621,8 +617,7 @@ impl<'i> Interpreter<'i> {
                 Ok(res)
             }
             Expr::Unary(unary_expr) => {
-                let value_addr = self.interpret_expr(&unary_expr.expr)?;
-                let value_container = self.allocator.get(value_addr);
+                let value_container = self.interpret_expr(&unary_expr.expr)?;
                 let value_read = value_container.read();
 
                 match unary_expr.op {
@@ -643,8 +638,7 @@ impl<'i> Interpreter<'i> {
                 }
             }
             Expr::Call(call_expr) => {
-                let function_addr = self.interpret_expr(&call_expr.callee)?;
-                let function_container = self.allocator.get(function_addr);
+                let function_container = self.interpret_expr(&call_expr.callee)?;
                 let function_read = function_container.read();
                 let function = match &*function_read {
                     Value::Function(function) => function,
@@ -673,12 +667,12 @@ impl<'i> Interpreter<'i> {
                 let mut args = vec![];
                 for expr in &call_expr.args {
                     let val = self.interpret_expr(expr)?;
-                    args.push(self.allocator.clone(val));
+                    args.push(self.allocator.clone(&val));
                 }
 
                 let res = function.call(self, args);
                 if let Ok(v) = res {
-                    return Ok(v.unwrap_or(self.allocator.get_none()));
+                    return Ok(v.unwrap_or_else(|| self.allocator.get_none()));
                 } else if let Err(mut e) = res {
                     if e.span
                         == (Span {
@@ -698,8 +692,7 @@ impl<'i> Interpreter<'i> {
             Expr::String(is) => Ok(Value::String(*is)),
             Expr::Grouping(e) => return self.interpret_expr(e),
             Expr::Get(get_expr) => {
-                let object_addr = self.interpret_expr(&get_expr.object)?;
-                let object_container = self.allocator.get(object_addr);
+                let object_container = self.interpret_expr(&get_expr.object)?;
                 let object_read = object_container.read();
                 let object = match &*object_read {
                     Value::DataObject(dobj) => dobj,
@@ -716,13 +709,13 @@ impl<'i> Interpreter<'i> {
                     }
                 };
                 if let Some(value) = object.values.get(&get_expr.property) {
-                    return Ok(*value);
+                    return Ok(value.clone());
                 } else if let Some(method) = object.methods.get(&get_expr.property) {
                     return Ok(self
                         .allocator
                         .allocate(Value::Function(Box::new(YalFunction {
                             fun_stmt: method.clone(),
-                            data: Some(object_addr),
+                            data: Some(object_container.clone()),
                         }))));
                 } else {
                     Err(Diagnostic {
@@ -746,8 +739,7 @@ impl<'i> Interpreter<'i> {
                 Ok(Value::Array(items))
             }
             Expr::Index(index_expr) => {
-                let array_addr = self.interpret_expr(&index_expr.object)?;
-                let array_container = self.allocator.get(array_addr);
+                let array_container = self.interpret_expr(&index_expr.object)?;
                 let array_read = array_container.read();
                 let array = match &*array_read {
                     Value::Array(a) => a,
@@ -761,8 +753,8 @@ impl<'i> Interpreter<'i> {
                     }
                 };
 
-                let index_addr = self.interpret_expr(&index_expr.index)?;
-                let index = match &*self.allocator.get(index_addr).read() {
+                let index_container = self.interpret_expr(&index_expr.index)?;
+                let index = match &*index_container.read() {
                     Value::Int(idx) => *idx,
                     ty => {
                         return Err(Diagnostic {
@@ -774,8 +766,8 @@ impl<'i> Interpreter<'i> {
                     }
                 };
 
-                return if let Some(val_addr) = array.get(index as usize) {
-                    Ok(*val_addr)
+                return if let Some(val) = array.get(index as usize) {
+                    Ok(val.clone())
                 } else {
                     Err(Diagnostic {
                         severity: Severity::Error,
@@ -790,11 +782,10 @@ impl<'i> Interpreter<'i> {
                     Expr::Index(index_expr) => index_expr,
                     _ => unreachable!(),
                 };
-                let array_addr = self.interpret_expr(&index_expr.object)?;
-                let array_container = self.allocator.get(array_addr);
+                let array_container = self.interpret_expr(&index_expr.object)?;
 
-                let index_addr = self.interpret_expr(&index_expr.index)?;
-                let index = match &*self.allocator.get(index_addr).read() {
+                let _index = self.interpret_expr(&index_expr.index)?;
+                let index = match &*array_container.read() {
                     Value::Int(idx) => *idx,
                     ty => {
                         return Err(Diagnostic {
@@ -806,7 +797,7 @@ impl<'i> Interpreter<'i> {
                     }
                 };
 
-                let value_addr = self.interpret_expr(&indexset_expr.value)?;
+                let value = self.interpret_expr(&indexset_expr.value)?;
                 let mut array_write = array_container.write();
                 let array = match &mut *array_write {
                     Value::Array(a) => a,
@@ -829,14 +820,13 @@ impl<'i> Interpreter<'i> {
                     });
                 };
 
-                array[index as usize] = value_addr;
-                return Ok(value_addr);
+                array[index as usize] = value.clone();
+                return Ok(value);
             }
             Expr::Set(set_expr) => {
                 if let Expr::Get(get_expr) = &set_expr.object.expr {
                     let value = self.interpret_expr(&set_expr.value)?;
-                    let obj_addr = self.interpret_expr(&get_expr.object)?;
-                    let obj_container = self.allocator.get(obj_addr);
+                    let obj_container = self.interpret_expr(&get_expr.object)?;
                     let mut obj_write = obj_container.write();
                     let data_object = match &mut *obj_write {
                         Value::DataObject(data_object) => data_object,
@@ -856,7 +846,7 @@ impl<'i> Interpreter<'i> {
                     if let std::collections::hash_map::Entry::Occupied(mut e) =
                         data_object.values.entry(get_expr.property)
                     {
-                        e.insert(value);
+                        e.insert(value.clone());
                     } else {
                         return Err(Diagnostic {
                             severity: Severity::Error,
@@ -869,12 +859,11 @@ impl<'i> Interpreter<'i> {
                         });
                     }
 
-                    return Ok(obj_addr);
+                    return Ok(value);
                 }
 
-                let object_addr = self.interpret_expr(&set_expr.object)?;
-                let value_addr = self.interpret_expr(&set_expr.value)?;
-                let object_container = self.allocator.get(object_addr);
+                let object_container = self.interpret_expr(&set_expr.object)?;
+                let value = self.interpret_expr(&set_expr.value)?;
                 let object_read = object_container.read();
                 let object = match &*object_read {
                     Value::DataObject(dobj) => dobj,
@@ -918,8 +907,8 @@ impl<'i> Interpreter<'i> {
                         })
                     }
                 };
-                object.values.insert(set_expr.property, value_addr);
-                return Ok(object_addr);
+                object.values.insert(set_expr.property, value);
+                return Ok(object_container.clone());
             }
             Expr::Variable(v_expr) => {
                 let envs = self.envs.borrow_mut();
@@ -943,7 +932,7 @@ impl<'i> Interpreter<'i> {
                 } else {
                     for scope in scopes {
                         if let Some(env_item) = scope.get(&v_expr.name) {
-                            return Ok(env_item.addr);
+                            return Ok(env_item.value.clone());
                         }
                     }
                 }
@@ -973,9 +962,12 @@ impl<'i> Interpreter<'i> {
             |allocator: &mut Allocator, name: &str, function: Box<dyn Callable>| -> EnvItem {
                 let env_item = EnvItem {
                     mutable: Mutable::No,
-                    addr: allocator.allocate(Value::Function(function)),
+                    value: allocator.allocate(Value::Function(function)),
                 };
-                scope.insert(INTERNER.write().intern_string(name.to_string()), env_item);
+                scope.insert(
+                    INTERNER.write().intern_string(name.to_string()),
+                    env_item.clone(),
+                );
                 env_item
             };
 
@@ -995,7 +987,7 @@ impl<'i> Interpreter<'i> {
                         fun_stmt.name,
                         EnvItem {
                             mutable: Mutable::No,
-                            addr: allocator.allocate(Value::Function(Box::new(YalFunction {
+                            value: allocator.allocate(Value::Function(Box::new(YalFunction {
                                 fun_stmt: fun_stmt.clone(),
                                 data: None,
                             }))),
@@ -1003,19 +995,18 @@ impl<'i> Interpreter<'i> {
                     );
                 }
                 Stmt::Data(data_stmt) => {
-                    let value_addr =
-                        allocator.allocate(Value::Data(data_stmt.clone(), HashMap::new()));
+                    let value = allocator.allocate(Value::Data(data_stmt.clone(), HashMap::new()));
                     scope.insert(
                         data_stmt.name,
                         EnvItem {
                             mutable: Mutable::No,
-                            addr: value_addr,
+                            value,
                         },
                     );
                 }
                 Stmt::Methods(methods_stmt) => {
                     let data_container = match scope.get(&methods_stmt.data) {
-                        Some(ei) => allocator.get(ei.addr),
+                        Some(ei) => ei.value.clone(),
                         _ => {
                             return Err(Diagnostic {
                                 severity: Severity::Error,
@@ -1054,6 +1045,7 @@ impl<'i> Interpreter<'i> {
         &mut self.allocator
     }
 
+    #[allow(unused)]
     pub fn get_allocator(&self) -> &Allocator {
         &self.allocator
     }
@@ -1062,7 +1054,7 @@ impl<'i> Interpreter<'i> {
 #[derive(Debug, Clone)]
 struct YalFunction {
     fun_stmt: Box<FunStmt>,
-    data: Option<ValueAddr>,
+    data: Option<Arc<RwLock<Value>>>,
 }
 
 impl Callable for YalFunction {
@@ -1073,24 +1065,24 @@ impl Callable for YalFunction {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        args: Vec<ValueAddr>,
-    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        args: Vec<Arc<RwLock<Value>>>,
+    ) -> Result<Option<Arc<RwLock<Value>>>, Diagnostic> {
         let mut env = interpreter.envs.borrow_mut();
         let mut scope = HashMap::new();
         for (k, v) in self.fun_stmt.arguments.iter().zip(args.iter()) {
             scope.insert(
                 *k,
                 EnvItem {
-                    addr: *v,
+                    value: v.clone(),
                     mutable: Mutable::No,
                 },
             );
         }
-        if let Some(data) = self.data {
+        if let Some(data) = self.data.clone() {
             scope.insert(
                 INTERNER.write().intern_string("@".to_string()),
                 EnvItem {
-                    addr: data,
+                    value: data,
                     mutable: Mutable::Yes,
                 },
             );
@@ -1098,12 +1090,11 @@ impl Callable for YalFunction {
         } else {
             interpreter.context.push(InterpreterContext::Function);
         }
-        let parent_scope;
-        if env.get_mut(&interpreter.current).unwrap().len() > 1 {
-            parent_scope = env.get_mut(&interpreter.current).unwrap().pop();
+        let parent_scope= if env.get_mut(&interpreter.current).unwrap().len() > 1 {
+            env.get_mut(&interpreter.current).unwrap().pop()
         } else {
-            parent_scope = None;
-        }
+            None
+        };
         env.get_mut(&interpreter.current).unwrap().push(scope);
         drop(env);
 
@@ -1114,12 +1105,8 @@ impl Callable for YalFunction {
                         return if let ErrorCode::Return(rv) = err.code {
                             interpreter.context.pop();
                             let mut env = interpreter.envs.borrow_mut();
-                            for _val in env.get_mut(&interpreter.current).unwrap().last().unwrap() {
-                                // FIXME: make sure deallocation actually works. At this moment, this will deallocate even if there
-                                //        are "ValueAddr"s pointing to it
-                                // self.allocator.deallocate(val.1.addr);
-                            }
                             env.get_mut(&interpreter.current).unwrap().pop();
+                            interpreter.allocator.dealloc_unused_objects();
                             if let Some(parent_scope) = parent_scope {
                                 env.get_mut(&interpreter.current)
                                     .unwrap()
@@ -1137,12 +1124,8 @@ impl Callable for YalFunction {
 
         interpreter.context.pop();
         let mut env = interpreter.envs.borrow_mut();
-        for _val in env.get_mut(&interpreter.current).unwrap().last().unwrap() {
-            // FIXME: make sure deallocation actually works. At this moment, this will deallocate even if there
-            //        are "ValueAddr"s pointing to it
-            // self.allocator.deallocate(val.1.addr);
-        }
         env.get_mut(&interpreter.current).unwrap().pop();
+        interpreter.allocator.dealloc_unused_objects();
         if let Some(parent_scope) = parent_scope {
             env.get_mut(&interpreter.current)
                 .unwrap()
@@ -1172,12 +1155,11 @@ type Scope = HashMap<InternedString, EnvItem>;
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum InterpreterContext {
     Function,
-    Loop,
     Method,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct EnvItem {
     pub mutable: Mutable,
-    pub addr: ValueAddr,
+    pub value: Arc<RwLock<Value>>,
 }

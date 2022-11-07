@@ -9,12 +9,6 @@ pub struct StmtContainer {
     pub span: Span,
 }
 
-impl StmtContainer {
-    pub fn new(stmt: Stmt, span: Span) -> Self {
-        Self { stmt, span }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Var(Box<VarStmt>),
