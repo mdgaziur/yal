@@ -445,9 +445,23 @@ impl<'i> Interpreter<'i> {
 
                         res
                     }
-                    (Value::Int(lhs), Value::Float(rhs)) | (Value::Float(rhs), Value::Int(lhs)) => {
+                    (Value::Int(lhs), Value::Float(rhs)) => {
                         let lhs = *lhs as f64;
                         let rhs = *rhs;
+                        Value::Boolean(match op {
+                            LogicalOperation::Equals => lhs == rhs,
+                            LogicalOperation::NotEquals => lhs != rhs,
+                            LogicalOperation::GreaterThan => lhs > rhs,
+                            LogicalOperation::LessThan => lhs < rhs,
+                            LogicalOperation::GreaterThanOrEquals => lhs >= rhs,
+                            LogicalOperation::LessThanOrEquals => lhs <= rhs,
+                            LogicalOperation::And => (lhs != 0.0) && (rhs != 0.0),
+                            LogicalOperation::Or => (lhs != 0.0) || (rhs != 0.0),
+                        })
+                    }
+                    (Value::Float(lhs), Value::Int(rhs)) => {
+                        let lhs = *lhs;
+                        let rhs = *rhs as f64;
                         Value::Boolean(match op {
                             LogicalOperation::Equals => lhs == rhs,
                             LogicalOperation::NotEquals => lhs != rhs,
@@ -530,16 +544,22 @@ impl<'i> Interpreter<'i> {
                 };
 
                 let res = match (&*lhs_inner, &*rhs_inner) {
-                    (Value::Int(lhs), Value::Float(rhs)) | (Value::Float(rhs), Value::Int(lhs)) => {
-                        match op {
-                            BinaryOperation::Plus => Value::Float(*lhs as f64 + *rhs),
-                            BinaryOperation::Minus => Value::Float(*lhs as f64 - *rhs),
-                            BinaryOperation::Multiply => Value::Float(*lhs as f64 * *rhs),
-                            BinaryOperation::Divide => Value::Float(*lhs as f64 / *rhs),
-                            BinaryOperation::Modulus => Value::Float(*lhs as f64 % *rhs),
-                            _ => return return_error(),
-                        }
-                    }
+                    (Value::Int(lhs), Value::Float(rhs)) => match op {
+                        BinaryOperation::Plus => Value::Float(*lhs as f64 + *rhs),
+                        BinaryOperation::Minus => Value::Float(*lhs as f64 - *rhs),
+                        BinaryOperation::Multiply => Value::Float(*lhs as f64 * *rhs),
+                        BinaryOperation::Divide => Value::Float(*lhs as f64 / *rhs),
+                        BinaryOperation::Modulus => Value::Float(*lhs as f64 % *rhs),
+                        _ => return return_error(),
+                    },
+                    (Value::Float(lhs), Value::Int(rhs)) => match op {
+                        BinaryOperation::Plus => Value::Float(*lhs + *rhs as f64),
+                        BinaryOperation::Minus => Value::Float(*lhs - *rhs as f64),
+                        BinaryOperation::Multiply => Value::Float(*lhs * *rhs as f64),
+                        BinaryOperation::Divide => Value::Float(*lhs / *rhs as f64),
+                        BinaryOperation::Modulus => Value::Float(*lhs % *rhs as f64),
+                        _ => return return_error(),
+                    },
                     (Value::Float(lhs), Value::Float(rhs)) => match op {
                         BinaryOperation::Plus => Value::Float(*lhs + *rhs),
                         BinaryOperation::Minus => Value::Float(*lhs - *rhs),
