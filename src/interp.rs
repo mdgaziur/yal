@@ -1137,7 +1137,7 @@ impl Callable for YalFunction {
 
     fn to_string(&self) -> String {
         format!(
-            "<function {} at {:p}>",
+            "<function `{}` at {:p}>",
             INTERNER.read().get_interned_string(self.fun_stmt.name),
             self as *const _
         )

@@ -65,7 +65,7 @@ impl Callable for PrintFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"print\" at {:p}>", self as *const _)
+        format!("<native function `print` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -96,7 +96,7 @@ impl Callable for PrintlnFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"println\" at {:p}>", self as *const _)
+        format!("<native function `println` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -147,7 +147,7 @@ impl Callable for SleepFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"sleep\" at {:p}>", self as *const _)
+        format!("<native function `sleep` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -191,7 +191,7 @@ impl Callable for ArrayPopFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"sleep\" at {:p}>", self as *const _)
+        format!("<native function `sleep` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -234,7 +234,7 @@ impl Callable for InputFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"input\" at {:p}>", self as *const _)
+        format!("<native function `input` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -299,7 +299,7 @@ impl Callable for IntFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"int\" at {:p}>", self as *const _)
+        format!("<native function `int` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -364,7 +364,7 @@ impl Callable for FloatFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"float\" at {:p}>", self as *const _)
+        format!("<native function `float` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -438,7 +438,7 @@ impl Callable for PowFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"pow\" at {:p}>", self as *const _)
+        format!("<native function `pow` at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
