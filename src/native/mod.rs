@@ -299,7 +299,7 @@ impl Callable for IntFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"input\" at {:p}>", self as *const _)
+        format!("<native function \"int\" at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
@@ -364,7 +364,7 @@ impl Callable for FloatFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"input\" at {:p}>", self as *const _)
+        format!("<native function \"float\" at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
