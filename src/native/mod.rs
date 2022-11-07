@@ -380,3 +380,79 @@ impl Callable for FloatFunction {
         Clone::clone(self)
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct PowFunction {}
+
+impl Callable for PowFunction {
+    fn arity(&self) -> usize {
+        2
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<ValueAddr>,
+    ) -> Result<Option<ValueAddr>, Diagnostic> {
+        let v_1_addr = args[0];
+        let v_1_container = interpreter.get_allocator().get(v_1_addr);
+        let v_1_read = v_1_container.read();
+        let v_1 = match &*v_1_read {
+            Value::Int(i) => *i as f64,
+            Value::Float(f) => *f as f64,
+            _ => {
+                return Err(Diagnostic {
+                    span: Span {
+                        lo: usize::MAX,
+                        hi: usize::MAX,
+                    },
+                    code: ErrorCode::InvalidType,
+                    message: format!(
+                        "Expected type `string`, `float` or `int`, found {}",
+                        v_1_read.type_()
+                    ),
+                    severity: Severity::Error,
+                })
+            }
+        };
+
+        let v_2_addr = args[1];
+        let v_2_container = interpreter.get_allocator().get(v_2_addr);
+        let v_2_read = v_2_container.read();
+        let v_2 = match &*v_2_read {
+            Value::Int(i) => *i as f64,
+            Value::Float(f) => *f as f64,
+            _ => {
+                return Err(Diagnostic {
+                    span: Span {
+                        lo: usize::MAX,
+                        hi: usize::MAX,
+                    },
+                    code: ErrorCode::InvalidType,
+                    message: format!(
+                        "Expected type `string`, `float` or `int`, found {}",
+                        v_2_read.type_()
+                    ),
+                    severity: Severity::Error,
+                })
+            }
+        };
+
+        Ok(Some(
+            interpreter
+                .get_allocator_mut()
+                .allocate(Value::Float(v_1.powf(v_2))),
+        ))
+    }
+
+    fn to_string(&self) -> String {
+        format!("<native function \"input\" at {:p}>", self as *const _)
+    }
+
+    fn clone(&self) -> Self
+    where
+        Self: Sized,
+    {
+        Clone::clone(self)
+    }
+}

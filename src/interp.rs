@@ -922,6 +922,7 @@ impl<'i> Interpreter<'i> {
         create_native_fn(allocator, "input", Box::new(InputFunction {}));
         create_native_fn(allocator, "int", Box::new(IntFunction {}));
         create_native_fn(allocator, "float", Box::new(FloatFunction {}));
+        create_native_fn(allocator, "pow", Box::new(PowFunction {}));
 
         for stmt in ast {
             match &stmt.stmt {
