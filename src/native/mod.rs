@@ -446,7 +446,7 @@ impl Callable for PowFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<native function \"input\" at {:p}>", self as *const _)
+        format!("<native function \"pow\" at {:p}>", self as *const _)
     }
 
     fn clone(&self) -> Self
