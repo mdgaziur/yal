@@ -109,7 +109,7 @@ pub enum Expr {
     Number(NumberExpr),
     Grouping(Box<ExprContainer>),
     Array(Vec<ExprContainer>),
-    Variable(InternedString),
+    Variable(VariableExpr),
 }
 
 impl Expr {
@@ -128,7 +128,6 @@ pub struct DataExpr {
 pub struct AssignmentExpr {
     pub lvalue: ExprContainer,
     pub rvalue: ExprContainer,
-    pub data_member: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -268,4 +267,10 @@ pub struct CallExpr {
 pub struct NumberExpr {
     pub value: InternedString,
     pub kind: NumberKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariableExpr {
+    pub name: InternedString,
+    pub data_member: bool,
 }

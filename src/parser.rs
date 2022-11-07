@@ -2,9 +2,9 @@ use crate::ast::{
     AssignmentExpr, BinaryExpr, BinaryOperation, CallExpr, DataExpr, DataStmt, Expr, ExprContainer,
     FunStmt, GetExpr, IfStmt, IndexExpr, IndexSetExpr, IterStmt, LogicalExpr, LogicalOperation,
     MethodsStmt, Mutable, NumberExpr, SetExpr, Stmt, StmtContainer, UnaryExpr, UnaryOperation,
-    VarStmt,
+    VarStmt, VariableExpr,
 };
-use crate::diagnostics::{Diagnostic, ErrorCode, Severity};
+use crate::diagnostics::{Diagnostic, ErrorCode, Severity, Span};
 
 use crate::lexer::{Lexer, Token, TokenKind};
 use std::collections::HashMap;
@@ -372,12 +372,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<ExprContainer, Diagnostic> {
-        let mut data_member = false;
         let start_span = self.peek().span;
-        if self.peek().kind == TokenKind::At {
-            data_member = true;
-            self.advance();
-        }
 
         let expr = self.logical_or()?;
 
@@ -433,7 +428,6 @@ impl Parser {
                     .into_container(start_span.merge(self.peek().span))),
                     Expr::Variable(_) => Ok(Expr::Assignment(Box::new(AssignmentExpr {
                         lvalue: expr.clone(),
-                        data_member,
                         rvalue: Expr::Binary(Box::new(BinaryExpr {
                             lhs: expr.clone(),
                             op,
@@ -473,8 +467,7 @@ impl Parser {
                     value: rhs,
                 }))
                 .into_container(start_span.merge(self.peek().span))),
-                Expr::Variable(_name) => Ok(Expr::Assignment(Box::new(AssignmentExpr {
-                    data_member,
+                Expr::Variable(_) => Ok(Expr::Assignment(Box::new(AssignmentExpr {
                     lvalue: expr,
                     rvalue: rhs,
                 }))
@@ -816,6 +809,21 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<ExprContainer, Diagnostic> {
+        let data_member;
+        if self.peek().kind == TokenKind::At {
+            data_member = true;
+            self.advance();
+
+            if self.is_eof() {
+                return Err(Self::error_for_token(
+                    ErrorCode::UnexpectedToken,
+                    "Unexpected EOF",
+                    self.peek(),
+                ));
+            }
+        } else {
+            data_member = false;
+        }
         let current_token = self.peek();
         self.advance();
 
@@ -825,8 +833,11 @@ impl Parser {
             TokenKind::None => Ok(Expr::None.into_container(current_token.span)),
             TokenKind::Identifier => {
                 let start_span = self.peek().span;
-                let mut expr = Expr::Variable(current_token.value.get_string())
-                    .into_container(current_token.span);
+                let mut expr = Expr::Variable(VariableExpr {
+                    name: current_token.value.get_string(),
+                    data_member,
+                })
+                .into_container(current_token.span);
                 if self.peek().kind == TokenKind::LeftBracket {
                     self.advance();
                     let index = self.expr()?;
@@ -838,9 +849,16 @@ impl Parser {
                     }))
                     .into_container(start_span.merge(self.previous().span));
                 } else if self.peek().kind == TokenKind::LeftBrace {
+                    if data_member {
+                        return Err(Self::error_for_token(
+                            ErrorCode::InvalidType,
+                            "Expected data, found type",
+                            current_token,
+                        ));
+                    }
                     self.advance();
                     let name = match expr.expr {
-                        Expr::Variable(n) => n,
+                        Expr::Variable(n) => n.name,
                         _ => unreachable!(),
                     };
                     let mut props = HashMap::new();
