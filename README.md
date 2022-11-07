@@ -167,3 +167,17 @@ fun main() {
 | `^=`      | Bitwise xor by rhs         |
 | `>>=`     | Right shift by rhs         |
 | `<<=`     | Left shift by rhs          |
+
+# Native Functions
+
+| Function | Description                                            | Prototype                                      |
+|----------|--------------------------------------------------------|------------------------------------------------|
+| print    | Prints arguments to STDOUT                             | `fn print(..) -> None`                         |
+| println  | `print`, but with newline at the end                   | `fn println(..) -> None`                       |
+| sleep    | Sleeps for `n`  seconds                                | `fn sleep(n: int/float) -> None`               |
+| pop      | Removes last element of given array                    | `fn pop(arr: [any]) -> any`                    |
+| input    | Prints prompt(if given) and takes user input as string | `fn input(prompt: string?) -> string`          |
+| int      | Converts given argument to `int` type                  | `fn int(n: string/int/float) -> int`           |
+| float    | Converts given argument to `float` type                | `fn float(n: string/int/float) -> float`       |
+| pow      | Applies nth power on x                                 | `fn pow(x: int/float, n: int/float) -> float`  |
+
