@@ -14,9 +14,9 @@ pub struct Allocator {
 }
 
 impl Allocator {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            allocations: vec![],
+            allocations: vec![Arc::new(RwLock::new(Value::None))],
         }
     }
 
@@ -25,9 +25,6 @@ impl Allocator {
     }
 
     pub fn allocate(&mut self, value: Value) -> Arc<RwLock<Value>> {
-        if self.allocations.is_empty() {
-            self.allocations.push(Arc::new(RwLock::new(Value::None)));
-        }
         if matches!(value, Value::None) {
             return self.allocations[0].clone();
         }
@@ -53,7 +50,8 @@ impl Allocator {
     }
 
     pub fn dealloc_unused_objects(&mut self) {
-        self.allocations.retain(|e| Arc::strong_count(e) > 1)
+        self.allocations
+            .retain(|e| matches!(&*e.read(), Value::None) || Arc::strong_count(e) > 1)
     }
 }
 
