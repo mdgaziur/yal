@@ -1,7 +1,7 @@
 use crate::diagnostics::{Diagnostic, ErrorCode, Severity, Span};
 use crate::interner::INTERNER;
+use crate::interp::Interpreter;
 use crate::memory::{Callable, Value};
-use crate::Interpreter;
 
 use std::io::Write;
 use std::sync::Arc;

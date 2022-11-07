@@ -10,7 +10,7 @@ use crate::native::{
     ArrayPopFunction, FloatFunction, InputFunction, IntFunction, PowFunction, PrintFunction,
     PrintlnFunction, SleepFunction,
 };
-use crate::Session;
+use crate::session::Session;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::str::FromStr;

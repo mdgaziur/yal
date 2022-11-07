@@ -5,7 +5,7 @@ use std::fmt::Debug;
 
 use crate::ast::{DataStmt, FunStmt};
 use crate::diagnostics::Diagnostic;
-use crate::Interpreter;
+use crate::interp::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
 

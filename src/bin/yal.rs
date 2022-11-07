@@ -1,16 +1,5 @@
-use crate::interp::Interpreter;
-use crate::session::Session;
-
-mod analyzer;
-mod ast;
-mod diagnostics;
-mod interner;
-mod interp;
-mod lexer;
-mod memory;
-mod native;
-mod parser;
-mod session;
+use yal::interp::Interpreter;
+use yal::session::Session;
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
