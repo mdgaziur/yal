@@ -165,7 +165,8 @@ impl<'i> Interpreter<'i> {
             Stmt::If(if_stmt) => {
                 let condition_container = self.interpret_expr(&if_stmt.condition)?;
                 let condition_read = condition_container.read();
-                let is_condition_met = !matches!(&*condition_read, Value::None | Value::Boolean(false));
+                let is_condition_met =
+                    !matches!(&*condition_read, Value::None | Value::Boolean(false));
 
                 if is_condition_met {
                     self.interpret_stmt(&if_stmt.block)?;
@@ -1090,7 +1091,7 @@ impl Callable for YalFunction {
         } else {
             interpreter.context.push(InterpreterContext::Function);
         }
-        let parent_scope= if env.get_mut(&interpreter.current).unwrap().len() > 1 {
+        let parent_scope = if env.get_mut(&interpreter.current).unwrap().len() > 1 {
             env.get_mut(&interpreter.current).unwrap().pop()
         } else {
             None
