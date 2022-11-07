@@ -117,4 +117,5 @@ pub trait Callable: Debug + Send + Sync {
 pub struct DataObject {
     pub name: InternedString,
     pub values: HashMap<InternedString, ValueAddr>,
+    pub methods: HashMap<InternedString, Box<FunStmt>>,
 }

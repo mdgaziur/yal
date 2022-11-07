@@ -1,14 +1,14 @@
 use crate::ast::{
-    BinaryOperation, Expr, ExprContainer, FunStmt, LogicalOperation, Mutable, Stmt, StmtContainer,
-    UnaryOperation,
+    BinaryOperation, Expr, ExprContainer, FunStmt, GetExpr, LogicalOperation, Mutable, SetExpr,
+    Stmt, StmtContainer, UnaryOperation, VariableExpr,
 };
 use crate::diagnostics::{Diagnostic, ErrorCode, Severity, Span};
 use crate::interner::{InternedString, INTERNER};
 use crate::lexer::NumberKind;
 use crate::memory::{Allocator, Callable, DataObject, Value, ValueAddr};
 use crate::native::{
-    ArrayPopFunction, FloatFunction, InputFunction, IntFunction, PrintFunction, PrintlnFunction,
-    SleepFunction,
+    ArrayPopFunction, FloatFunction, InputFunction, IntFunction, PowFunction, PrintFunction,
+    PrintlnFunction, SleepFunction,
 };
 use crate::Session;
 use std::cell::RefCell;
@@ -30,7 +30,7 @@ impl<'i> Interpreter<'i> {
             session: RefCell::new(session),
             envs: RefCell::new(HashMap::new()),
             current: InternedString::default(),
-            context: vec![],
+            context: vec![InterpreterContext::Function], // execution starts at `main` function
         }
     }
 
@@ -219,7 +219,7 @@ impl<'i> Interpreter<'i> {
                 self.interpret_expr(expr)?;
             }
             Stmt::Data(_) => (),
-            _ => todo!("{:?}", stmt),
+            Stmt::Methods(_) => (),
         }
 
         Ok(())
@@ -270,26 +270,42 @@ impl<'i> Interpreter<'i> {
     fn interpret_expr(&mut self, expr: &ExprContainer) -> Result<ValueAddr, Diagnostic> {
         let val = match &expr.expr {
             Expr::Assignment(assignment_expr) => {
-                let name = match assignment_expr.lvalue.expr {
-                    Expr::Variable(name) => name,
+                let v_expr = match &assignment_expr.lvalue.expr {
+                    Expr::Variable(v_expr) => v_expr,
                     _ => unreachable!(),
                 };
-                if let Some(mutability) = self.get_mutability(name) {
-                    if mutability == Mutable::No {
+                let name = v_expr.name;
+                if !v_expr.data_member {
+                    if let Some(mutability) = self.get_mutability(name) {
+                        if mutability == Mutable::No {
+                            return Err(Diagnostic {
+                                severity: Severity::Error,
+                                code: ErrorCode::MutabilityError,
+                                message: String::from("Attempt to mutate immutable variable"),
+                                span: expr.span,
+                            });
+                        }
+                    } else {
                         return Err(Diagnostic {
                             severity: Severity::Error,
-                            code: ErrorCode::MutabilityError,
-                            message: String::from("Attempt to mutate immutable variable"),
+                            code: ErrorCode::UndefinedVariable,
+                            message: String::from("Undefined variable/type"),
                             span: expr.span,
                         });
                     }
                 } else {
-                    return Err(Diagnostic {
-                        severity: Severity::Error,
-                        code: ErrorCode::UndefinedVariable,
-                        message: String::from("Undefined variable/type"),
-                        span: expr.span,
-                    });
+                    return self.interpret_expr(
+                        &Expr::Set(Box::new(SetExpr {
+                            property: name,
+                            value: assignment_expr.rvalue.clone(),
+                            object: Expr::Variable(VariableExpr {
+                                name: INTERNER.read().get_intern_addr_for_string("@").unwrap(),
+                                data_member: false,
+                            })
+                            .into_container(expr.span),
+                        }))
+                        .into_container(expr.span),
+                    );
                 }
 
                 let rvalue = self.interpret_expr(&assignment_expr.rvalue)?;
@@ -314,12 +330,15 @@ impl<'i> Interpreter<'i> {
             Expr::Data(data_expr) => {
                 let data_addr = self.interpret_expr(&ExprContainer {
                     span: expr.span,
-                    expr: Expr::Variable(data_expr.name),
+                    expr: Expr::Variable(VariableExpr {
+                        name: data_expr.name,
+                        data_member: false,
+                    }),
                 })?;
                 let data_container = self.allocator.get(data_addr);
                 let data_read = data_container.read();
-                let data_stmt = match &*data_read {
-                    Value::Data(ds, _) => ds,
+                let (data_stmt, data_methods) = match &*data_read {
+                    Value::Data(ds, dm) => (ds, dm.clone()),
                     val => {
                         return Err(Diagnostic {
                             severity: Severity::Error,
@@ -367,6 +386,7 @@ impl<'i> Interpreter<'i> {
                 Ok(Value::DataObject(DataObject {
                     name: data_expr.name,
                     values,
+                    methods: data_methods,
                 }))
             }
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
@@ -697,6 +717,13 @@ impl<'i> Interpreter<'i> {
                 };
                 if let Some(value) = object.values.get(&get_expr.property) {
                     return Ok(*value);
+                } else if let Some(method) = object.methods.get(&get_expr.property) {
+                    return Ok(self
+                        .allocator
+                        .allocate(Value::Function(Box::new(YalFunction {
+                            fun_stmt: method.clone(),
+                            data: Some(object_addr),
+                        }))));
                 } else {
                     Err(Diagnostic {
                         severity: Severity::Error,
@@ -894,13 +921,30 @@ impl<'i> Interpreter<'i> {
                 object.values.insert(set_expr.property, value_addr);
                 return Ok(object_addr);
             }
-            Expr::Variable(name) => {
+            Expr::Variable(v_expr) => {
                 let envs = self.envs.borrow_mut();
                 let scopes = envs[&self.current].iter().rev();
 
-                for scope in scopes {
-                    if let Some(env_item) = scope.get(name) {
-                        return Ok(env_item.addr);
+                if v_expr.data_member {
+                    drop(envs);
+                    if *self.context.last().unwrap() == InterpreterContext::Method {
+                        return self.interpret_expr(
+                            &Expr::Get(Box::new(GetExpr {
+                                object: Expr::Variable(VariableExpr {
+                                    name: INTERNER.read().get_intern_addr_for_string("@").unwrap(),
+                                    data_member: false,
+                                })
+                                .into_container(expr.span),
+                                property: v_expr.name,
+                            }))
+                            .into_container(expr.span),
+                        );
+                    }
+                } else {
+                    for scope in scopes {
+                        if let Some(env_item) = scope.get(&v_expr.name) {
+                            return Ok(env_item.addr);
+                        }
                     }
                 }
 
@@ -953,6 +997,7 @@ impl<'i> Interpreter<'i> {
                             mutable: Mutable::No,
                             addr: allocator.allocate(Value::Function(Box::new(YalFunction {
                                 fun_stmt: fun_stmt.clone(),
+                                data: None,
                             }))),
                         },
                     );
@@ -1017,6 +1062,7 @@ impl<'i> Interpreter<'i> {
 #[derive(Debug, Clone)]
 struct YalFunction {
     fun_stmt: Box<FunStmt>,
+    data: Option<ValueAddr>,
 }
 
 impl Callable for YalFunction {
@@ -1040,6 +1086,18 @@ impl Callable for YalFunction {
                 },
             );
         }
+        if let Some(data) = self.data {
+            scope.insert(
+                INTERNER.write().intern_string("@".to_string()),
+                EnvItem {
+                    addr: data,
+                    mutable: Mutable::Yes,
+                },
+            );
+            interpreter.context.push(InterpreterContext::Method);
+        } else {
+            interpreter.context.push(InterpreterContext::Function);
+        }
         let parent_scope;
         if env.get_mut(&interpreter.current).unwrap().len() > 1 {
             parent_scope = env.get_mut(&interpreter.current).unwrap().pop();
@@ -1054,6 +1112,7 @@ impl Callable for YalFunction {
                 for stmt in stmts {
                     if let Err(err) = interpreter.interpret_stmt(stmt) {
                         return if let ErrorCode::Return(rv) = err.code {
+                            interpreter.context.pop();
                             let mut env = interpreter.envs.borrow_mut();
                             for _val in env.get_mut(&interpreter.current).unwrap().last().unwrap() {
                                 // FIXME: make sure deallocation actually works. At this moment, this will deallocate even if there
@@ -1076,6 +1135,7 @@ impl Callable for YalFunction {
             _ => unreachable!(),
         }
 
+        interpreter.context.pop();
         let mut env = interpreter.envs.borrow_mut();
         for _val in env.get_mut(&interpreter.current).unwrap().last().unwrap() {
             // FIXME: make sure deallocation actually works. At this moment, this will deallocate even if there
@@ -1109,7 +1169,7 @@ impl Callable for YalFunction {
 
 type Scope = HashMap<InternedString, EnvItem>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum InterpreterContext {
     Function,
     Loop,
