@@ -2,10 +2,6 @@
 
 YAL is yet another scripting language(but worse).
 
-# TODO
-
-- Implement interpreter code for interpreting `method` statement
-
 # Syntax
 
 ### Basic syntax
