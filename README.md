@@ -116,22 +116,23 @@ fun add(a, b) {
 data Triangle {
     AB,
     AC,
-    BC,
+    BC
 }
 
 methods Triangle {
     fun area() {
-        ret @AB * @AC / 2;
+        const s = (@AB + @AC + @BC) / 2;
+        ret pow(s * (s - @AB) * (s - @BC) * (s - @AC), 0.5);
     }
 }
 
 fun main() {
     const triangle = Triangle {
-        AB: 1,
-        AC: 2,
-        BC: 3,
+        AB: 4,
+        AC: 5,
+        BC: 6
     };
-    print(triangle.AB); // 1
+    println(triangle.area());
 }
 ```
 
