@@ -33,6 +33,16 @@ impl Interner {
         InternedString(id)
     }
 
+    pub fn get_intern_addr_for_string(&self, string: &str) -> Option<InternedString> {
+        for (idx, interned_string) in self.strings.iter().enumerate() {
+            if interned_string == string {
+                return Some(InternedString(idx));
+            }
+        }
+
+        None
+    }
+
     pub fn get_interned_string(&self, id: InternedString) -> &str {
         &self.strings[id.0]
     }
