@@ -69,7 +69,21 @@ impl<'i> Interpreter<'i> {
 
     pub fn interpret(&mut self) {
         let session = self.session.borrow();
+        // FIXME: remove clone
+        let ast = session.get_ast(self.current).to_vec();
         drop(session);
+        for stmt in &ast {
+            if let Err(e) = self.interpret_stmt(stmt) {
+                eprintln!(
+                    "{}",
+                    e.display(
+                        INTERNER.read().get_interned_string(self.current),
+                        &self.session.borrow().files[&self.current]
+                    )
+                );
+                return;
+            }
+        }
         if let Err(e) = self.interpret_main() {
             eprintln!(
                 "{}",
@@ -785,8 +799,8 @@ impl<'i> Interpreter<'i> {
                 };
                 let array_container = self.interpret_expr(&index_expr.object)?;
 
-                let _index = self.interpret_expr(&index_expr.index)?;
-                let index = match &*array_container.read() {
+                let index_expr = self.interpret_expr(&index_expr.index)?;
+                let index = match &*index_expr.read() {
                     Value::Int(idx) => *idx,
                     ty => {
                         return Err(Diagnostic {
